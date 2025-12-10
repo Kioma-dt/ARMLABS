@@ -8,7 +8,7 @@ matrix_size: .skip 2
 .global _start
 
 _start:
-ask_size:
+input:
     mov x0, #1
     ldr x1, =msg_input
     mov x2, #msg_input_len
@@ -22,46 +22,57 @@ ask_size:
     svc #0
 
     sub x0, x0, #1
-    cmp x0, #1
-    beq good_input_size
+    ldr x1, =input_buffer
+    bl atoi
+
+    cmp x0, #-1
+    bgt input_is_num
 
     mov x0, #1
-    ldr x1, =msg_wrong_input
-    mov x2, #msg_wrong_input_len
+    ldr x1, =error_not_number
+    mov x2, #error_not_number_len
     mov x8, #64
     svc #0
-    b _start
 
-good_input_size:
-    ldr x3, =input_buffer
-    ldr x4, =matrix_size
-    ldrb w1, [x3]
-
-    mov x0, #3
-    strh w0, [x4]
-    mov x20, #3
-    cmp w1, #'3'
-    beq good_input
-
-    mov x0, #5
-    strh w0, [x4]
-    mov x20, #5
-    cmp w1, #'5'
-    beq good_input
-
-    mov x0, #7
-    strh w0, [x4]
-    mov x20, #7
-    cmp w1, #'7'
-    beq good_input
+    b input
+input_is_num:
+    cmp x0, #0
+    bgt input_is_positive
 
     mov x0, #1
-    ldr x1, =msg_wrong_input
-    mov x2, #msg_wrong_input_len
+    ldr x1, =error_border
+    mov x2, #error_border_len
     mov x8, #64
     svc #0
-    b _start
 
+    b input    
+
+
+input_is_positive:
+    cmp x0, #32
+    blt input_is_in_border
+
+    mov x0, #1
+    ldr x1, =error_border
+    mov x2, #error_border_len
+    mov x8, #64
+    svc #0
+
+    b input    
+
+input_is_in_border:
+    mov x2, #1
+    and x1, x0, x2
+    cmp x1, #0
+    bne good_input
+
+    mov x0, #1
+    ldr x1, =error_not_odd
+    mov x2, #error_not_odd_len
+    mov x8, #64
+    svc #0
+
+    b input    
 
 
 good_input:
@@ -77,6 +88,7 @@ good_input:
 // x1 - i
 // x0 - abs address
 
+    mov x20, x0
     ldr x19, =matrix
     mul x21, x20, x20
 
@@ -164,11 +176,12 @@ output_matrix_loop:
     mov x0, 0
     ldrb w0, [x19], 1
     ldr x1, =output_buffer
+    mov x2, #3
     bl itoa
 
     mov x0, #1
     ldr x1, =output_buffer
-    mov x2, 2
+    mov x2, 3
     mov x8, #64
     svc #0
 
@@ -209,30 +222,113 @@ exit:
     svc #0
 
 
+// x0 - buff len, x1 - buff ptr
+// x0 - number or -1
+atoi:
+    mov x2, #0          
+    mov x3, #0          
 
+atoi_loop:
+    cmp x3, x0
+    bge atoi_done
 
-itoa:
-    mov x2, #10
-    udiv x3, x0, x2 
+    ldrb w4, [x1, x3]
+    add x3, x3, #1
 
-    add x3, x3, #'0'
-    strb w3, [x1]
-    sub x3, x3, #'0'
+    cmp w4, #'0'
+    blt atoi_error
+    cmp w4, #'9'
+    bgt atoi_error
 
-    mov x4, #10
-    mul x3, x3, x4
-    sub x4, x0, x3
+    sub w4, w4, #'0'
 
-    add x4, x4, #'0'
-    strb w4, [x1, #1] 
+    mov x5, #10
+    mul x2, x2, x5
+    add x2, x2, x4
 
+    b atoi_loop
+
+atoi_done:
+    mov x0, x2
     ret
 
-msg_input:    .asciz "Введите размер матрицы (3, 5 или 7): "
+atoi_error:
+    mov x0, #-1
+    ret
+
+
+
+// x0 - number, x1 - buffer ptr, x2 - len of num
+// x0 - buff len
+itoa:            
+    mov x3, #0
+
+    cmp x0, #0
+    bne itoa_extract
+
+    mov w4, #'0'
+    strb w4, [x1]
+    mov x3, #1
+    b itoa_fill_zero
+
+itoa_extract:
+    mov x5, #10
+
+itoa_extract_loop:
+    udiv x6, x0, x5
+    msub x7, x6, x5, x0 
+    add x7, x7, #'0'
+    strb w7, [x1, x3]
+    add x3, x3, #1
+
+    mov x0, x6
+    cmp x0, #0
+    bne itoa_extract_loop
+
+itoa_fill_zero:
+    cmp x3, x2
+    bge itoa_reverse
+
+itoa_fill_zero_loop:
+    mov w4, #'0'
+    strb w4, [x1, x3]
+    add x3, x3, #1
+
+    cmp x3, x2
+    blt itoa_fill_zero_loop
+
+
+itoa_reverse:
+    mov x9, x3            
+    sub x3, x3, #1        
+    mov x4, #0          
+
+itoa_reverse_loop:
+    cmp x4, x3
+    bge itoa_done
+
+    ldrb w5, [x1, x4]
+    ldrb w6, [x1, x3]
+    strb w6, [x1, x4]
+    strb w5, [x1, x3]
+
+    add x4, x4, #1
+    sub x3, x3, #1
+    b itoa_reverse_loop
+
+itoa_done:
+    mov x0, x9
+    ret
+
+msg_input:    .asciz "Введите размер матрицы (нечетное число от 1 до 31): "
 msg_input_len = . - msg_input - 1
 msg_result:  .asciz "Матрица: \n"
 msg_result_len = . - msg_result - 1
-msg_wrong_input: .asciz "Неверный ввод!\n"
-msg_wrong_input_len = . - msg_wrong_input - 1
+error_not_number: .asciz "Введенная строка не является целым числом\n\n"
+error_not_number_len = . - error_not_number - 1
+error_border: .asciz "Введенное число не входит в промежуток от 1 до 31\n\n"
+error_border_len = . - error_border - 1
+error_not_odd: .asciz "Введенное число четное\n\n"
+error_not_odd_len = . - error_not_odd - 1
 new_line: .asciz "\n"
 spa_char: .asciz " "

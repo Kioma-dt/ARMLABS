@@ -223,7 +223,7 @@ atoi_loop:
     cmp w4, #'9'
     bgt atoi_error
 
-    sub w4, w4, #'0'    // превращаем в число
+    sub w4, w4, #'0'
 
     mov x5, #10
     mul x2, x2, x5
